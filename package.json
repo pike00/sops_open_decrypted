@@ -1,0 +1,148 @@
+{
+  "name": "sops-open-decrypted",
+  "displayName": "SOPS Open Decrypted",
+  "description": "Open .sops files decrypted in a native VS Code text editor. Saves re-encrypt automatically.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.85.0" },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onFileSystem:sops-decrypted"
+  ],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "sops.decryptedEditor",
+        "displayName": "SOPS Decrypted",
+        "selector": [{ "filenamePattern": "*.sops" }],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "sops.openDecrypted",
+        "title": "Open SOPS Decrypted",
+        "category": "SOPS",
+        "icon": "$(unlock)"
+      },
+      {
+        "command": "sops.saveDecrypted",
+        "title": "Save & Re-encrypt",
+        "category": "SOPS",
+        "icon": "$(save)"
+      },
+      {
+        "command": "sops.discardDecrypted",
+        "title": "Discard",
+        "category": "SOPS",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "sops.revealSource",
+        "title": "Reveal .sops Source",
+        "category": "SOPS",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "sops.openApplicableConfig",
+        "title": "Open Applicable .sops.yaml",
+        "category": "SOPS",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "sops.revealInSCM",
+        "title": "Reveal in Source Control",
+        "category": "SOPS",
+        "icon": "$(source-control)"
+      },
+      {
+        "command": "sops.showRecipients",
+        "title": "Show Recipients",
+        "category": "SOPS",
+        "icon": "$(key)"
+      },
+      {
+        "command": "sops.showEncryptionCoverage",
+        "title": "Show Encryption Coverage",
+        "category": "SOPS",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "sops.showSopsYaml",
+        "title": "Show .sops.yaml",
+        "category": "SOPS",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "sops.openDecrypted",
+          "when": "resourceExtname == .sops",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "sops.saveDecrypted",
+          "when": "resourceScheme == sops-decrypted",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sops.discardDecrypted",
+          "when": "resourceScheme == sops-decrypted",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sops.revealSource",
+          "when": "resourceScheme == sops-decrypted",
+          "group": "navigation@3"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "sops.openDecrypted",
+          "when": "resourceExtname == .sops"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "sops.openDecrypted",
+          "when": "resourceExtname == .sops"
+        },
+        {
+          "command": "sops.saveDecrypted",
+          "when": "resourceScheme == sops-decrypted"
+        },
+        {
+          "command": "sops.discardDecrypted",
+          "when": "resourceScheme == sops-decrypted"
+        },
+        {
+          "command": "sops.revealSource",
+          "when": "resourceScheme == sops-decrypted"
+        },
+        {
+          "command": "sops.openApplicableConfig",
+          "when": "resourceScheme == sops-decrypted || resourceExtname == .sops"
+        },
+        {
+          "command": "sops.revealInSCM",
+          "when": "resourceScheme == sops-decrypted || resourceExtname == .sops"
+        },
+        {
+          "command": "sops.showRecipients",
+          "when": "resourceScheme == sops-decrypted || resourceExtname == .sops"
+        },
+        {
+          "command": "sops.showEncryptionCoverage",
+          "when": "resourceScheme == sops-decrypted || resourceExtname == .sops"
+        },
+        {
+          "command": "sops.showSopsYaml"
+        }
+      ]
+    }
+  }
+}
