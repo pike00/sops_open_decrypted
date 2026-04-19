@@ -2,15 +2,46 @@
   "name": "sops-open-decrypted",
   "displayName": "SOPS Open Decrypted",
   "description": "Open .sops files decrypted in a native VS Code text editor. Saves re-encrypt automatically.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "local",
   "engines": { "vscode": "^1.85.0" },
   "main": "./extension.js",
+  "extensionKind": ["workspace"],
   "activationEvents": [
     "onStartupFinished",
     "onFileSystem:sops-decrypted"
   ],
   "contributes": {
+    "configuration": {
+      "title": "SOPS",
+      "properties": {
+        "sops.configPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Path to `.sops.yaml`. When set, passed to sops via `--config`, bypassing ancestor-walk. Relative paths resolve against the workspace folder. Supports `~`, `${workspaceFolder}`, `${env:VAR}`."
+        },
+        "sops.envFile": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Path to a dotenv file loaded into the sops process env (e.g. `SOPS_AGE_KEY_FILE`, `AWS_PROFILE`). Values in `sops.env` win over this. Supports `~`, `${workspaceFolder}`, `${env:VAR}`. Gitignore this file if it contains secrets."
+        },
+        "sops.env": {
+          "type": "object",
+          "default": {},
+          "scope": "resource",
+          "additionalProperties": { "type": "string" },
+          "markdownDescription": "Inline environment variables merged on top of `sops.envFile` before invoking sops. Values support `~`, `${workspaceFolder}`, `${env:VAR}`. **Do not** embed private key material directly — reference key files by path instead."
+        },
+        "sops.binaryPath": {
+          "type": "string",
+          "default": "sops",
+          "scope": "resource",
+          "markdownDescription": "Path to the `sops` binary. Defaults to whatever is on `PATH`. Supports `~`, `${workspaceFolder}`, `${env:VAR}`."
+        }
+      }
+    },
     "customEditors": [
       {
         "viewType": "sops.decryptedEditor",
@@ -73,6 +104,12 @@
         "title": "Show .sops.yaml",
         "category": "SOPS",
         "icon": "$(gear)"
+      },
+      {
+        "command": "sops.showEffectiveConfig",
+        "title": "Show Effective Configuration",
+        "category": "SOPS",
+        "icon": "$(info)"
       }
     ],
     "menus": {
@@ -141,6 +178,10 @@
         },
         {
           "command": "sops.showSopsYaml"
+        },
+        {
+          "command": "sops.showEffectiveConfig",
+          "when": "resourceScheme == sops-decrypted || resourceExtname == .sops"
         }
       ]
     }

@@ -5,6 +5,11 @@ const path = require('path');
 const crypto = require('crypto');
 const { getInputType } = require('../util/paths');
 const { findInvalidDotenvLines } = require('../util/dotenv');
+const { resolveConfig } = require('../util/config');
+
+function buildGlobalFlags(configPath) {
+    return configPath ? ['--config', configPath] : [];
+}
 
 class SopsFileSystemProvider {
     constructor() {
@@ -32,8 +37,16 @@ class SopsFileSystemProvider {
     readFile(uri) {
         const sopsPath = uri.fsPath + '.sops';
         const inputType = getInputType(sopsPath);
+        const { configPath, binaryPath, env } = resolveConfig(uri);
+        const args = [
+            ...buildGlobalFlags(configPath),
+            'decrypt',
+            '--input-type', inputType,
+            '--output-type', inputType,
+            sopsPath,
+        ];
         try {
-            return execFileSync('sops', ['decrypt', '--input-type', inputType, '--output-type', inputType, sopsPath]);
+            return execFileSync(binaryPath, args, { env });
         } catch (err) {
             throw new Error(`SOPS decrypt failed: ${err.stderr?.toString() || err.message}`);
         }
@@ -43,6 +56,7 @@ class SopsFileSystemProvider {
         const sopsPath = uri.fsPath + '.sops';
         const inputType = getInputType(sopsPath);
         const dir = path.dirname(sopsPath);
+        const { configPath, binaryPath, env } = resolveConfig(uri);
 
         // Pre-validate dotenv before spawning sops so the error clearly names the bad line.
         // SOPS rejects any non-empty, non-comment line without '=' with a cryptic wrapper otherwise.
@@ -58,10 +72,17 @@ class SopsFileSystemProvider {
         const tmp = `/dev/shm/sops-${crypto.randomBytes(6).toString('hex')}`;
         try {
             fs.writeFileSync(tmp, content, { mode: 0o600 });
-            const encrypted = execFileSync(
-                'sops', ['encrypt', '--input-type', inputType, '--output-type', inputType, tmp],
-                { cwd: dir }
-            );
+            // --filename-override makes SOPS match creation_rules against the real .sops path
+            // instead of the random tmp path, and picks the right input-type fallback.
+            const args = [
+                ...buildGlobalFlags(configPath),
+                'encrypt',
+                '--filename-override', sopsPath,
+                '--input-type', inputType,
+                '--output-type', inputType,
+                tmp,
+            ];
+            const encrypted = execFileSync(binaryPath, args, { cwd: dir, env });
             fs.writeFileSync(sopsPath, encrypted);
             this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
         } catch (err) {
