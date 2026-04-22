@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { getInputType } = require('../util/paths');
 const { findInvalidDotenvLines } = require('../util/dotenv');
 const { resolveConfig } = require('../util/config');
+const saveReason = require('../util/saveReasonTracker');
 const logger = require('../util/logger');
 
 function buildGlobalFlags(configPath) {
@@ -82,9 +83,24 @@ class SopsFileSystemProvider {
         const inputType = getInputType(sopsPath);
         const dir = path.dirname(sopsPath);
         const bufLen = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(String(content));
+        const reason = saveReason.consume(uri);
         logger.trace('fs', 'writeFile enter', {
-            uri: uri.toString(), fsPath: uri.fsPath, sopsPath, inputType, bytes: bufLen,
+            uri: uri.toString(), fsPath: uri.fsPath, sopsPath, inputType, bytes: bufLen, saveReason: reason,
         });
+        // Only re-encrypt on explicit saves (Ctrl+S, the "Save & Re-encrypt"
+        // command, or the "Save" button on the close-dirty prompt). All of
+        // those produce reason === Manual. AfterDelay and FocusOut come from
+        // files.autoSave; throwing here keeps the document dirty so the user
+        // can retry, and skips the decrypt/encrypt round-trip per keystroke.
+        if (reason === vscode.TextDocumentSaveReason.AfterDelay ||
+            reason === vscode.TextDocumentSaveReason.FocusOut) {
+            logger.info('fs', 'writeFile blocked (autosave)', {
+                uri: uri.toString(), reason,
+            });
+            throw vscode.FileSystemError.NoPermissions(
+                'SOPS: autosave disabled for .sops files. Press Ctrl+S or run "SOPS: Save & Re-encrypt".'
+            );
+        }
         const { configPath, configPathError, binaryPath, env, envFile, envFileError, inlineEnv } = resolveConfig(uri);
         logger.trace('config', 'resolved for writeFile', {
             configPath: configPath ?? null,

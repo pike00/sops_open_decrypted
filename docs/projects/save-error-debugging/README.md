@@ -4,7 +4,7 @@ status: active
 repos: [sops_open_decrypted]
 started: 2026-04-21
 last_updated: 2026-04-21
-next_step: Reload the extension host, reproduce a save failure, then pull the trace from `~/.local/state/sops-open-decrypted/trace.log` and triage.
+next_step: Reload the extension host and verify that typing into an open `sops-decrypted://` document no longer re-encrypts on the autosave tick; confirm Ctrl+S and the close-dirty prompt still save.
 ---
 
 # Save Error Debugging
@@ -29,7 +29,8 @@ Diagnose why saving files through the `sops-decrypted://` virtual filesystem kee
 - Project created after yet another save failure on litellm/.env (line 19 `OLLAMA_API_KEY` missing `=`, Copilot ghost text).
 - Built file-based trace logger: `src/util/logger.js` now writes to `~/.local/state/sops-open-decrypted/trace.log` (override: `sops.debugLogFile`). Channel logs stay short; file logs carry full argv, cwd, env var names, stderr, durations, validator decisions.
 - Added `sops.showLogFile` command + `sops.debugLogFile` setting.
-- Redaction rule: never log file contents (plaintext or ciphertext), never log env var values — only names.
+- Redaction rule: never log file contents (plaintext or ciphertext), never log env var values, only names.
+- **Policy decision: autosave no longer re-encrypts.** `src/util/saveReasonTracker.js` captures the `TextDocumentSaveReason` from `onWillSaveTextDocument`; `SopsFileSystemProvider.writeFile` throws `FileSystemError.NoPermissions` when the reason is `AfterDelay` or `FocusOut`, which keeps the document dirty without touching the `.sops` file on disk. Only `Manual` (Ctrl+S, `sops.saveDecrypted`, the "Save" button on the close-dirty prompt) re-encrypts. Kills the ghost-text race and the keystroke-rate encrypt load.
 
 ## Notes
 ### Why the current failure is not obviously a bug

@@ -5,6 +5,7 @@ const { SopsFileSystemProvider } = require('./src/providers/sopsFileSystemProvid
 const { redirectEditorProvider } = require('./src/providers/redirectEditorProvider');
 const { decorationProvider } = require('./src/providers/decorationProvider');
 const { registerAll: registerCommands } = require('./src/commands');
+const saveReason = require('./src/util/saveReasonTracker');
 const logger = require('./src/util/logger');
 
 function activate(context) {
@@ -52,6 +53,7 @@ function activate(context) {
     );
 
     registerCommands(context);
+    saveReason.register(context);
 }
 
 function deactivate() {}
