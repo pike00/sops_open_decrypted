@@ -109,6 +109,7 @@ class SopsFileSystemProvider {
             fs.writeFileSync(sopsPath, encrypted);
             this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
             logger.logOpResult('encrypt', { ok: true, ms: Date.now() - t0, bytes: encrypted.length });
+            vscode.window.showInformationMessage(`SOPS: saved & re-encrypted ${path.basename(sopsPath)}`);
         } catch (err) {
             const stderr = err.stderr?.toString() || err.message;
             logger.logOpResult('encrypt', { ok: false, ms: Date.now() - t0, stderr });
