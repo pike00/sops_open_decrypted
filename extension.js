@@ -11,6 +11,18 @@ function activate(context) {
     // Eagerly create the SOPS log channel so it appears in the Output dropdown
     // on activation and its disposal is tied to the extension lifecycle.
     context.subscriptions.push(logger.getLogger());
+    try {
+        const pkg = require('./package.json');
+        logger.info('activate', 'extension activated', {
+            version: pkg.version,
+            logFile: logger.getLogFilePath(),
+            vscodeVersion: vscode.version,
+            appHost: vscode.env.appHost,
+            remoteName: vscode.env.remoteName ?? '(local)',
+        });
+    } catch (err) {
+        logger.warn('activate', 'activation logging error', { error: err.message });
+    }
     const provider = new SopsFileSystemProvider();
 
     const langStatus = vscode.languages.createLanguageStatusItem('sops.decrypted', { scheme: SCHEME });

@@ -39,6 +39,12 @@
           "default": "sops",
           "scope": "resource",
           "markdownDescription": "Path to the `sops` binary. Defaults to whatever is on `PATH`. Supports `~`, `${workspaceFolder}`, `${env:VAR}`."
+        },
+        "sops.debugLogFile": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Append-only trace log file. Empty → `$XDG_STATE_HOME/sops-open-decrypted/trace.log` (falls back to `~/.local/state/…`). Supports `~`, `${userHome}`, `${env:VAR}`. Contents include paths, args, durations, stderr — never file bodies or env values."
         }
       }
     },
@@ -116,6 +122,12 @@
         "title": "Show Log",
         "category": "SOPS",
         "icon": "$(output)"
+      },
+      {
+        "command": "sops.showLogFile",
+        "title": "Show Trace Log File",
+        "category": "SOPS",
+        "icon": "$(file)"
       }
     ],
     "menus": {
@@ -191,6 +203,9 @@
         },
         {
           "command": "sops.showLog"
+        },
+        {
+          "command": "sops.showLogFile"
         }
       ]
     }
