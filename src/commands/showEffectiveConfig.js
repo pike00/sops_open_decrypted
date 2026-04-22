@@ -36,6 +36,9 @@ function register(context) {
             channel.appendLine(`Config path:  ${cfg.configPath || '(unset — SOPS walks up from file dir)'}`);
             if (cfg.configPath) {
                 channel.appendLine(`  exists:     ${fs.existsSync(cfg.configPath)}`);
+                if (cfg.configPathError) {
+                    channel.appendLine(`  error:      ${cfg.configPathError}`);
+                }
             }
             channel.appendLine(`Env file:     ${cfg.envFile || '(unset)'}`);
             if (cfg.envFile) {

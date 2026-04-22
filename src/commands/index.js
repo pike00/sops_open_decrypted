@@ -6,6 +6,7 @@ const showRecipients = require('./showRecipients');
 const showEncryptionCoverage = require('./showEncryptionCoverage');
 const showSopsYaml = require('./showSopsYaml');
 const showEffectiveConfig = require('./showEffectiveConfig');
+const showLog = require('./showLog');
 
 function registerAll(context) {
     openDecrypted.register(context);
@@ -16,6 +17,7 @@ function registerAll(context) {
     showEncryptionCoverage.register(context);
     showSopsYaml.register(context);
     showEffectiveConfig.register(context);
+    showLog.register(context);
 }
 
 module.exports = { registerAll };

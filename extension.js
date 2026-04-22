@@ -5,8 +5,12 @@ const { SopsFileSystemProvider } = require('./src/providers/sopsFileSystemProvid
 const { redirectEditorProvider } = require('./src/providers/redirectEditorProvider');
 const { decorationProvider } = require('./src/providers/decorationProvider');
 const { registerAll: registerCommands } = require('./src/commands');
+const logger = require('./src/util/logger');
 
 function activate(context) {
+    // Eagerly create the SOPS log channel so it appears in the Output dropdown
+    // on activation and its disposal is tied to the extension lifecycle.
+    context.subscriptions.push(logger.getLogger());
     const provider = new SopsFileSystemProvider();
 
     const langStatus = vscode.languages.createLanguageStatusItem('sops.decrypted', { scheme: SCHEME });

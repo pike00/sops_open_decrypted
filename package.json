@@ -110,6 +110,12 @@
         "title": "Show Effective Configuration",
         "category": "SOPS",
         "icon": "$(info)"
+      },
+      {
+        "command": "sops.showLog",
+        "title": "Show Log",
+        "category": "SOPS",
+        "icon": "$(output)"
       }
     ],
     "menus": {
@@ -182,6 +188,9 @@
         {
           "command": "sops.showEffectiveConfig",
           "when": "resourceScheme == sops-decrypted || resourceExtname == .sops"
+        },
+        {
+          "command": "sops.showLog"
         }
       ]
     }
