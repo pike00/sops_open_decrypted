@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(~/.claude/skills/project-update/**)",
+      "Edit(~/.claude/skills/project-archive/**)"
+    ]
+  }
+}
