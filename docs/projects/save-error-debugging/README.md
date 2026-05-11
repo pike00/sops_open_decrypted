@@ -3,7 +3,7 @@ title: Save Error Debugging
 status: active
 repos: [sops_open_decrypted]
 started: 2026-04-21
-last_updated: 2026-04-21
+last_updated: 2026-05-10
 next_step: Reload the extension host and verify that typing into an open `sops-decrypted://` document no longer re-encrypts on the autosave tick; confirm Ctrl+S and the close-dirty prompt still save.
 ---
 
@@ -24,6 +24,9 @@ Diagnose why saving files through the `sops-decrypted://` virtual filesystem kee
 - [ ] Document the diagnosis + chosen policy in this README's Notes section.
 
 ## Session Log
+
+### 2026-05-10
+- Housekeeping (automated): bumped `last_updated` from 2026-04-21. Save-reason tracking landed in `ac1f3dc` (`src/util/saveReasonTracker.js` present on disk). Verification still outstanding — `~/.local/state/sops-open-decrypted/trace.log` not yet present, so the extension host reload + repro called out in `next_step` has not happened. Tasks left unchecked.
 
 ### 2026-04-21
 - Project created after yet another save failure on litellm/.env (line 19 `OLLAMA_API_KEY` missing `=`, Copilot ghost text).
