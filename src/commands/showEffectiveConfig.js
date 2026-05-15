@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const { resolveConfig } = require('../util/config');
 const { activeSopsPath } = require('../util/paths');
+const { SOPS_ENV_RE } = require('../util/logger');
 
 const SECRET_PATTERN = /key|token|secret|password|credential|private/i;
 
@@ -61,7 +62,7 @@ function register(context) {
             channel.appendLine('');
             channel.appendLine('SOPS-relevant merged env (masked):');
             const relevant = Object.keys(cfg.env)
-                .filter(k => /^(SOPS_|AWS_|AZURE_|GCP_|GOOGLE_|VAULT_)/.test(k))
+                .filter(k => SOPS_ENV_RE.test(k))
                 .sort();
             if (relevant.length === 0) {
                 channel.appendLine('  (no SOPS_* / AWS_* / GCP_* / VAULT_* vars set)');

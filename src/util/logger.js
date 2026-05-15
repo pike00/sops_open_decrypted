@@ -158,4 +158,5 @@ module.exports = {
     show,
     trace, debug, info, warn, error,
     getLogFilePath,
+    SOPS_ENV_RE,
 };
