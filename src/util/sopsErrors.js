@@ -37,6 +37,12 @@ const PATTERNS = [
             'layout. Inspect the raw .sops bytes, or re-encrypt from a known-good plaintext.',
     },
     {
+        re: /ETIMEDOUT|timed out|context deadline exceeded/i,
+        explain:
+            'sops timed out after 30 s. Check network connectivity for KMS/cloud keys, ' +
+            'or ensure your age key file is accessible.',
+    },
+    {
         re: /Error getting data key|access denied|AccessDenied|InvalidAuthenticationToken|Could not contact KMS/i,
         explain:
             'KMS/HSM access denied. Check your cloud credentials ($AWS_PROFILE, GOOGLE_APPLICATION_CREDENTIALS, $AZURE_*). ' +
