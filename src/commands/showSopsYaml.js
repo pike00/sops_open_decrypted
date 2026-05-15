@@ -1,7 +1,7 @@
 const vscode = require('vscode');
-const fs = require('fs');
 const path = require('path');
 const { SCHEME } = require('../constants');
+const { findSopsYaml } = require('../util/findSopsYaml');
 
 function startDir() {
     const uri = vscode.window.activeTextEditor?.document.uri;
@@ -15,19 +15,12 @@ function startDir() {
 function register(context) {
     context.subscriptions.push(
         vscode.commands.registerCommand('sops.showSopsYaml', async () => {
-            let dir = startDir();
+            const dir = startDir();
             if (!dir) { vscode.window.showErrorMessage('No active file or workspace'); return; }
-            while (true) {
-                for (const name of ['.sops.yaml', '.sops.yml']) {
-                    const candidate = path.join(dir, name);
-                    if (fs.existsSync(candidate)) {
-                        await vscode.window.showTextDocument(vscode.Uri.file(candidate), { preview: true });
-                        return;
-                    }
-                }
-                const parent = path.dirname(dir);
-                if (parent === dir) break;
-                dir = parent;
+            const found = findSopsYaml(dir);
+            if (found) {
+                await vscode.window.showTextDocument(vscode.Uri.file(found), { preview: true });
+                return;
             }
             vscode.window.showWarningMessage('No .sops.yaml found walking up from ' + startDir());
         })
