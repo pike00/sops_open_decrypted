@@ -3,19 +3,32 @@
   "displayName": "SOPS Open Decrypted",
   "description": "Open .sops files decrypted in a native VS Code text editor. Saves re-encrypt automatically.",
   "version": "0.2.0",
-  "publisher": "local",
+  "publisher": "pike00",
   "engines": { "vscode": "^1.85.0", "node": ">=18" },
   "main": "./extension.js",
   "scripts": {
     "test": "node scripts/test-detection.js && node scripts/smoke-detect.js",
     "test:unit": "node scripts/test-detection.js",
-    "test:smoke": "node scripts/smoke-detect.js"
+    "test:smoke": "node scripts/smoke-detect.js",
+    "vscode:prepublish": "npm run test:unit",
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "extensionKind": ["workspace"],
   "activationEvents": [
     "onStartupFinished",
     "onFileSystem:sops-decrypted"
   ],
+  "license": "MIT",
+  "icon": "assets/icon.png",
+  "repository": { "type": "git", "url": "https://github.com/pike00/sops_open_decrypted.git" },
+  "bugs": { "url": "https://github.com/pike00/sops_open_decrypted/issues" },
+  "homepage": "https://github.com/pike00/sops_open_decrypted#readme",
+  "categories": ["Other"],
+  "keywords": ["sops", "secrets", "encryption", "age", "kms", "dotenv", "decrypt", "security"],
+  "galleryBanner": { "color": "#13263F", "theme": "dark" },
+  "preview": false,
+  "devDependencies": { "@vscode/vsce": "^3.2.0" },
   "contributes": {
     "configuration": {
       "title": "SOPS",
