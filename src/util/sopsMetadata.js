@@ -31,8 +31,14 @@ function parseCoverageRules(raw) {
 function shouldKeyBeEncrypted(key, rules) {
     if (rules.unencSuffix && key.endsWith(rules.unencSuffix)) return false;
     if (rules.encSuffix && !key.endsWith(rules.encSuffix)) return false;
-    if (rules.unencRegex) { try { if (new RegExp(rules.unencRegex).test(key)) return false; } catch {} }
-    if (rules.encRegex)   { try { if (!new RegExp(rules.encRegex).test(key)) return false; } catch {} }
+    if (rules.unencRegex) {
+        try { if (new RegExp(rules.unencRegex).test(key)) return false; }
+        catch (e) { console.warn(`[sops] invalid unencrypted_regex ${JSON.stringify(rules.unencRegex)}: ${e.message}`); }
+    }
+    if (rules.encRegex) {
+        try { if (!new RegExp(rules.encRegex).test(key)) return false; }
+        catch (e) { console.warn(`[sops] invalid encrypted_regex ${JSON.stringify(rules.encRegex)}: ${e.message}`); }
+    }
     return true;
 }
 
