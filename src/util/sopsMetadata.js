@@ -1,14 +1,18 @@
 function parseRecipients(raw) {
-    const out = { age: [], kms: [], pgp: [] };
+    const out = { age: [], kms: [], gcpKms: [], azureKv: [], pgp: [] };
     const push = (arr, val) => { if (val && !arr.includes(val)) arr.push(val); };
     // dotenv/INI flattened metadata
     for (const m of raw.matchAll(/^sops_age__list_\d+__map_recipient=(.+)$/gm)) push(out.age, m[1]);
     for (const m of raw.matchAll(/^sops_kms__list_\d+__map_arn=(.+)$/gm)) push(out.kms, m[1]);
     for (const m of raw.matchAll(/^sops_pgp__list_\d+__map_fp=(.+)$/gm)) push(out.pgp, m[1]);
+    for (const m of raw.matchAll(/^sops_gcp_kms__list_\d+__map_resource_id=(.+)$/gm)) push(out.gcpKms, m[1]);
+    for (const m of raw.matchAll(/^sops_azure_kv__list_\d+__map_vault_url=(.+)$/gm)) push(out.azureKv, m[1]);
     // YAML/JSON metadata: line-oriented scan within sops block
     for (const m of raw.matchAll(/^\s*-?\s*["']?recipient["']?\s*:\s*["']?([^"'\s,}]+)/gm)) push(out.age, m[1]);
     for (const m of raw.matchAll(/^\s*-?\s*["']?arn["']?\s*:\s*["']?(arn:aws:kms:[^"'\s,}]+)/gm)) push(out.kms, m[1]);
     for (const m of raw.matchAll(/^\s*-?\s*["']?fp["']?\s*:\s*["']?([A-F0-9]{16,})/gm)) push(out.pgp, m[1]);
+    for (const m of raw.matchAll(/^\s*-?\s*["']?resource_id["']?\s*:\s*["']?(projects\/[^"'\s,}]+)/gm)) push(out.gcpKms, m[1]);
+    for (const m of raw.matchAll(/^\s*-?\s*["']?vault_url["']?\s*:\s*["']?(https:\/\/[^"'\s,}]+)/gm)) push(out.azureKv, m[1]);
     return out;
 }
 

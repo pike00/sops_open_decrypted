@@ -1,12 +1,39 @@
 const fs = require('fs');
-const { execFileSync } = require('child_process');
+const { execFileSync, execFile } = require('child_process');
+const { promisify } = require('util');
 
-// Confirms the configured sops binary exists and is callable.
+const execFileAsync = promisify(execFile);
+
+// Confirms the configured sops binary exists and is callable (sync).
 // Returns { ok, version } on success or { ok: false, reason } on failure.
 function checkBinary(binaryPath, env) {
     try {
         const out = execFileSync(binaryPath, ['--version'], { timeout: 5000, env });
         const firstLine = out.toString().split(/\r?\n/).find(l => l.trim()) || '';
+        return { ok: true, version: firstLine.trim() };
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return {
+                ok: false,
+                reason:
+                    `sops binary not found at ${JSON.stringify(binaryPath)}. ` +
+                    `Install sops (https://getsops.io) or set "sops.binaryPath" in settings.`,
+            };
+        }
+        const stderr = (err.stderr && err.stderr.toString()) || err.message || '';
+        return {
+            ok: false,
+            reason: `sops binary at ${JSON.stringify(binaryPath)} is not callable: ` +
+                    (stderr.split(/\r?\n/)[0] || 'unknown error'),
+        };
+    }
+}
+
+// Async version — used by the FileSystemProvider so readFile/writeFile never block the extension host.
+async function checkBinaryAsync(binaryPath, env) {
+    try {
+        const { stdout } = await execFileAsync(binaryPath, ['--version'], { timeout: 5000, env });
+        const firstLine = stdout.split(/\r?\n/).find(l => l.trim()) || '';
         return { ok: true, version: firstLine.trim() };
     } catch (err) {
         if (err.code === 'ENOENT') {
@@ -40,4 +67,4 @@ function checkFileReadable(filePath) {
     }
 }
 
-module.exports = { checkBinary, checkFileReadable };
+module.exports = { checkBinary, checkBinaryAsync, checkFileReadable };

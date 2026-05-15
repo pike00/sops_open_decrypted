@@ -53,10 +53,14 @@ function expandVars(str, resourceUri) {
         const folder = resourceUri
             ? getWorkspaceFolderFor(resourceUri)
             : vscode.workspace.workspaceFolders?.[0];
-        result = result.replace(/\$\{workspaceFolder\}/g, folder?.uri.fsPath ?? '');
+        // Leave the token literal when no folder is open — expanding to ''
+        // silently turns "${workspaceFolder}/foo" into "/foo" which resolves
+        // to a random system path instead of failing visibly.
+        result = result.replace(/\$\{workspaceFolder\}/g,
+            folder?.uri.fsPath ?? '${workspaceFolder}');
         result = result.replace(/\$\{workspaceFolder:([^}]+)\}/g, (_, name) => {
             const f = vscode.workspace.workspaceFolders?.find(ws => ws.name === name);
-            return f?.uri.fsPath ?? '';
+            return f?.uri.fsPath ?? `\${workspaceFolder:${name}}`;
         });
     }
     return result;

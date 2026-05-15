@@ -1,15 +1,21 @@
 const vscode = require('vscode');
-const { execFileSync } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { detectStoreType, detectByExtension } = require('../util/storeDetection');
 const { findInvalidDotenvLines } = require('../util/dotenv');
 const { resolveConfig } = require('../util/config');
-const { checkBinary, checkFileReadable } = require('../util/preflight');
+const { checkBinaryAsync, checkFileReadable } = require('../util/preflight');
 const { normalize: normalizeErr } = require('../util/sopsErrors');
 const saveReason = require('../util/saveReasonTracker');
 const logger = require('../util/logger');
+
+const execFileAsync = promisify(execFile);
+
+// 50 MB ceiling on sops stdout/stderr — prevents OOM on pathological inputs.
+const MAX_SOPS_BUFFER = 50 * 1024 * 1024;
 
 function buildGlobalFlags(configPath) {
     return configPath ? ['--config', configPath] : [];
@@ -67,7 +73,9 @@ class SopsFileSystemProvider {
         const sopsPath = uri.fsPath + '.sops';
         try {
             const s = fs.statSync(sopsPath);
-            return { type: vscode.FileType.File, ctime: s.ctimeMs, mtime: s.mtimeMs, size: s.size };
+            // size 0: the encrypted file size is misleading; decrypted size
+            // is unknown without running sops, so report 0 rather than lie.
+            return { type: vscode.FileType.File, ctime: s.ctimeMs, mtime: s.mtimeMs, size: 0 };
         } catch {
             throw vscode.FileSystemError.FileNotFound(uri);
         }
@@ -78,21 +86,23 @@ class SopsFileSystemProvider {
     delete() { throw vscode.FileSystemError.NoPermissions(); }
     rename() { throw vscode.FileSystemError.NoPermissions(); }
 
-    _ensureBinary(binaryPath, env) {
+    async _ensureBinary(binaryPath, env) {
         const cached = this._binaryChecked.get(binaryPath);
         if (cached) return cached;
-        const r = checkBinary(binaryPath, env);
-        if (r.ok) this._binaryChecked.set(binaryPath, r);
+        const r = await checkBinaryAsync(binaryPath, env);
+        // Cache both success and failure — repeated failures from a bad config
+        // shouldn't shell out on every keystroke. Cache is cleared on settings change.
+        this._binaryChecked.set(binaryPath, r);
         if (r.ok) logger.info('preflight', 'sops binary ok', { binaryPath, version: r.version });
         else logger.error('preflight', 'sops binary check failed', { binaryPath, reason: r.reason });
         return r;
     }
 
-    _runSops(binaryPath, args, opts) {
-        return execFileSync(binaryPath, args, opts);
+    async _runSops(binaryPath, args, opts) {
+        return execFileAsync(binaryPath, args, { ...opts, maxBuffer: MAX_SOPS_BUFFER });
     }
 
-    _tryDecrypt(binaryPath, configPath, inputType, sopsPath, env, cwd) {
+    async _tryDecrypt(binaryPath, configPath, inputType, sopsPath, env, cwd) {
         const args = [
             ...buildGlobalFlags(configPath),
             'decrypt',
@@ -102,8 +112,8 @@ class SopsFileSystemProvider {
         ];
         const t0 = Date.now();
         try {
-            const out = this._runSops(binaryPath, args, { cwd, env, timeout: 30000 });
-            return { ok: true, content: out, ms: Date.now() - t0, inputType };
+            const { stdout } = await this._runSops(binaryPath, args, { cwd, env, timeout: 30000 });
+            return { ok: true, content: Buffer.from(stdout), ms: Date.now() - t0, inputType };
         } catch (err) {
             return {
                 ok: false,
@@ -114,7 +124,7 @@ class SopsFileSystemProvider {
         }
     }
 
-    readFile(uri) {
+    async readFile(uri) {
         const sopsPath = uri.fsPath + '.sops';
         logger.trace('fs', 'readFile enter', { uri: uri.toString(), fsPath: uri.fsPath, sopsPath });
 
@@ -149,7 +159,7 @@ class SopsFileSystemProvider {
             logger.warn('fs', 'envFile read error (continuing without)', { envFile, envFileError });
         }
 
-        const binCheck = this._ensureBinary(binaryPath, env);
+        const binCheck = await this._ensureBinary(binaryPath, env);
         if (!binCheck.ok) throw new Error(binCheck.reason);
 
         const cwd = path.dirname(sopsPath);
@@ -158,7 +168,7 @@ class SopsFileSystemProvider {
         });
 
         // Primary attempt: detected type.
-        const primary = this._tryDecrypt(binaryPath, configPath, detection.type, sopsPath, env, cwd);
+        const primary = await this._tryDecrypt(binaryPath, configPath, detection.type, sopsPath, env, cwd);
         if (primary.ok) {
             logger.logOpResult('decrypt', { ok: true, ms: primary.ms, bytes: primary.content.length });
             return primary.content;
@@ -176,7 +186,7 @@ class SopsFileSystemProvider {
                 stderrFirstLine: (primary.stderr || '').split(/\r?\n/)[0],
             });
             for (const alt of alternates) {
-                const r = this._tryDecrypt(binaryPath, configPath, alt, sopsPath, env, cwd);
+                const r = await this._tryDecrypt(binaryPath, configPath, alt, sopsPath, env, cwd);
                 if (r.ok) {
                     logger.info('fs', 'decrypt succeeded with fallback type', {
                         type: alt, fallbackFrom: detection.type,
@@ -193,7 +203,7 @@ class SopsFileSystemProvider {
         throw new Error(`SOPS decrypt failed: ${normalizeErr(primary.stderr)}`);
     }
 
-    writeFile(uri, content) {
+    async writeFile(uri, content) {
         const sopsPath = uri.fsPath + '.sops';
         const dir = path.dirname(sopsPath);
         const bufLen = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(String(content));
@@ -220,12 +230,10 @@ class SopsFileSystemProvider {
             detectionConfidence: detection.confidence,
         });
 
-        // Only re-encrypt on explicit saves. AfterDelay and FocusOut come
-        // from files.autoSave; rejecting here keeps the document dirty so
-        // the user can retry, and skips the decrypt/encrypt round-trip
-        // per keystroke.
-        if (reason === vscode.TextDocumentSaveReason.AfterDelay ||
-            reason === vscode.TextDocumentSaveReason.FocusOut) {
+        // Only re-encrypt on explicit manual saves. Any other reason
+        // (AfterDelay, FocusOut, or untracked) is an autosave trigger;
+        // rejecting keeps the document dirty so the user can Ctrl+S.
+        if (reason !== vscode.TextDocumentSaveReason.Manual) {
             logger.info('fs', 'writeFile blocked (autosave)', { uri: uri.toString(), reason });
             throw vscode.FileSystemError.NoPermissions(
                 'SOPS: autosave disabled for .sops files. Press Ctrl+S or run "SOPS: Save & Re-encrypt".'
@@ -249,7 +257,7 @@ class SopsFileSystemProvider {
             logger.warn('fs', 'envFile read error (continuing without)', { envFile, envFileError });
         }
 
-        const binCheck = this._ensureBinary(binaryPath, env);
+        const binCheck = await this._ensureBinary(binaryPath, env);
         if (!binCheck.ok) throw new Error(binCheck.reason);
 
         // Pre-validate dotenv before spawning sops so the error clearly names
@@ -272,26 +280,28 @@ class SopsFileSystemProvider {
             }
         }
 
-        const tmpDir = process.platform === 'linux' && fs.existsSync('/dev/shm') ? '/dev/shm' : require('os').tmpdir();
-        const tmp = require('path').join(tmpDir, `sops-${crypto.randomBytes(6).toString('hex')}`);
+        // Encrypt via stdin — avoids writing plaintext to disk entirely.
+        // `sops encrypt --filename-override <real path> - ` reads from stdin
+        // and matches creation_rules against the real .sops path.
+        const args = [
+            ...buildGlobalFlags(configPath),
+            'encrypt',
+            '--filename-override', sopsPath,
+            '--input-type', inputType,
+            '--output-type', inputType,
+            '-',
+        ];
+
         let stage = null;
-        logger.trace('fs', 'encrypt prep', { tmp, cwd: dir });
+        logger.trace('fs', 'encrypt prep (stdin mode)', { cwd: dir });
         logger.logOpStart('encrypt', { sopsPath, inputType, configPath, cwd: dir, binaryPath, env });
         const t0 = Date.now();
         try {
-            fs.writeFileSync(tmp, content, { mode: 0o600 });
-            const args = [
-                ...buildGlobalFlags(configPath),
-                'encrypt',
-                // --filename-override makes SOPS match creation_rules against the
-                // real .sops path instead of the random tmp path.
-                '--filename-override', sopsPath,
-                '--input-type', inputType,
-                '--output-type', inputType,
-                tmp,
-            ];
             logger.trace('fs', 'spawn encrypt', { binaryPath, args, cwd: dir });
-            const encrypted = this._runSops(binaryPath, args, { cwd: dir, env, timeout: 30000 });
+            const buf = Buffer.isBuffer(content) ? content : Buffer.from(String(content));
+            const { stdout: encrypted } = await this._runSops(binaryPath, args, {
+                cwd: dir, env, timeout: 30000, input: buf,
+            });
 
             // Atomic write: stage in same dir, fsync, rename. If we get killed
             // mid-write the original .sops file is preserved intact.
@@ -310,23 +320,14 @@ class SopsFileSystemProvider {
             stage = null; // consumed by rename
 
             this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
-            logger.logOpResult('encrypt', { ok: true, ms: Date.now() - t0, bytes: encrypted.length });
+            const encryptedLen = Buffer.isBuffer(encrypted) ? encrypted.length : Buffer.byteLength(encrypted);
+            logger.logOpResult('encrypt', { ok: true, ms: Date.now() - t0, bytes: encryptedLen });
             vscode.window.showInformationMessage(`SOPS: saved & re-encrypted ${path.basename(sopsPath)}`);
         } catch (err) {
             const stderr = err.stderr?.toString() || err.message;
             logger.logOpResult('encrypt', { ok: false, ms: Date.now() - t0, stderr });
             throw new Error(`SOPS encrypt failed: ${normalizeErr(stderr)}`);
         } finally {
-            // Plaintext tmp file always gets shredded.
-            try { execFileSync('shred', ['-u', tmp]); logger.trace('fs', 'tmp shredded', { tmp }); }
-            catch (e1) {
-                try { fs.unlinkSync(tmp); logger.trace('fs', 'tmp unlinked (shred unavailable)', { tmp, shredError: e1.message }); }
-                catch (e2) {
-                    if (e2.code !== 'ENOENT') {
-                        logger.warn('fs', 'tmp cleanup failed', { tmp, shredError: e1.message, unlinkError: e2.message });
-                    }
-                }
-            }
             // Stage file only exists if rename never happened — best-effort cleanup.
             if (stage) {
                 try { fs.unlinkSync(stage); logger.trace('fs', 'stage unlinked after failure', { stage }); }

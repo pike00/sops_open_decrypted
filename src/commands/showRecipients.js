@@ -15,7 +15,9 @@ function register(context) {
             const recipients = parseRecipients(raw);
             const items = [
                 ...recipients.age.map(r => ({ label: '$(key) age', description: r })),
-                ...recipients.kms.map(r => ({ label: '$(cloud) KMS', description: r })),
+                ...recipients.kms.map(r => ({ label: '$(cloud) AWS KMS', description: r })),
+                ...(recipients.gcpKms ?? []).map(r => ({ label: '$(cloud) GCP KMS', description: r })),
+                ...(recipients.azureKv ?? []).map(r => ({ label: '$(cloud) Azure KV', description: r })),
                 ...recipients.pgp.map(r => ({ label: '$(shield) PGP', description: r })),
             ];
             if (items.length === 0) {

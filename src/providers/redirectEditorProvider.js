@@ -20,19 +20,21 @@ const redirectEditorProvider = {
 
         // Show the placeholder for ~500ms before swapping to the real editor.
         setTimeout(async () => {
+            const findCustomTab = () => vscode.window.tabGroups.all
+                .flatMap(g => g.tabs)
+                .find(t =>
+                    t.input instanceof vscode.TabInputCustom &&
+                    t.input.viewType === 'sops.decryptedEditor' &&
+                    t.input.uri.toString() === document.uri.toString()
+                );
+
             try {
                 await vscode.window.showTextDocument(virtualUri, { preview: false, viewColumn });
-
-                // Close the custom-editor tab for this .sops file
-                const customTab = vscode.window.tabGroups.all
-                    .flatMap(g => g.tabs)
-                    .find(t =>
-                        t.input instanceof vscode.TabInputCustom &&
-                        t.input.viewType === 'sops.decryptedEditor' &&
-                        t.input.uri.toString() === document.uri.toString()
-                    );
+                const customTab = findCustomTab();
                 if (customTab) await vscode.window.tabGroups.close(customTab);
             } catch (err) {
+                // Close the stale webview placeholder even on failure.
+                try { const t = findCustomTab(); if (t) await vscode.window.tabGroups.close(t); } catch {}
                 logger.error('redirect', 'showTextDocument failed', {
                     sopsPath: document.uri.fsPath,
                     message: err.message,

@@ -22,7 +22,7 @@ function register(context) {
                 await vscode.window.showTextDocument(vscode.Uri.file(found), { preview: true });
                 return;
             }
-            vscode.window.showWarningMessage('No .sops.yaml found walking up from ' + startDir());
+            vscode.window.showWarningMessage('No .sops.yaml found walking up from ' + dir);
         })
     );
 }
