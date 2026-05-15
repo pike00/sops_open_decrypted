@@ -82,7 +82,7 @@ class SopsFileSystemProvider {
         const cached = this._binaryChecked.get(binaryPath);
         if (cached) return cached;
         const r = checkBinary(binaryPath, env);
-        this._binaryChecked.set(binaryPath, r);
+        if (r.ok) this._binaryChecked.set(binaryPath, r);
         if (r.ok) logger.info('preflight', 'sops binary ok', { binaryPath, version: r.version });
         else logger.error('preflight', 'sops binary check failed', { binaryPath, reason: r.reason });
         return r;
@@ -102,7 +102,7 @@ class SopsFileSystemProvider {
         ];
         const t0 = Date.now();
         try {
-            const out = this._runSops(binaryPath, args, { cwd, env });
+            const out = this._runSops(binaryPath, args, { cwd, env, timeout: 30000 });
             return { ok: true, content: out, ms: Date.now() - t0, inputType };
         } catch (err) {
             return {
@@ -272,7 +272,8 @@ class SopsFileSystemProvider {
             }
         }
 
-        const tmp = `/dev/shm/sops-${crypto.randomBytes(6).toString('hex')}`;
+        const tmpDir = process.platform === 'linux' && fs.existsSync('/dev/shm') ? '/dev/shm' : require('os').tmpdir();
+        const tmp = require('path').join(tmpDir, `sops-${crypto.randomBytes(6).toString('hex')}`);
         let stage = null;
         logger.trace('fs', 'encrypt prep', { tmp, cwd: dir });
         logger.logOpStart('encrypt', { sopsPath, inputType, configPath, cwd: dir, binaryPath, env });
@@ -290,7 +291,7 @@ class SopsFileSystemProvider {
                 tmp,
             ];
             logger.trace('fs', 'spawn encrypt', { binaryPath, args, cwd: dir });
-            const encrypted = this._runSops(binaryPath, args, { cwd: dir, env });
+            const encrypted = this._runSops(binaryPath, args, { cwd: dir, env, timeout: 30000 });
 
             // Atomic write: stage in same dir, fsync, rename. If we get killed
             // mid-write the original .sops file is preserved intact.
