@@ -1,7 +1,8 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
-const { activeSopsPath, getInputType } = require('../util/paths');
+const { activeSopsPath } = require('../util/paths');
+const { detectStoreType } = require('../util/storeDetection');
 const { parseCoverageRules, shouldKeyBeEncrypted } = require('../util/sopsMetadata');
 
 function register(context) {
@@ -9,14 +10,14 @@ function register(context) {
         vscode.commands.registerCommand('sops.showEncryptionCoverage', async () => {
             const sopsPath = activeSopsPath();
             if (!sopsPath) { vscode.window.showErrorMessage('No .sops file active'); return; }
-            const inputType = getInputType(sopsPath);
+            let raw;
+            try { raw = fs.readFileSync(sopsPath, 'utf8'); }
+            catch (err) { vscode.window.showErrorMessage(`Cannot read file: ${err.message}`); return; }
+            const { type: inputType } = detectStoreType(sopsPath);
             if (inputType !== 'dotenv' && inputType !== 'ini') {
                 vscode.window.showInformationMessage('Coverage view supports .env / .ini files (got ' + inputType + ')');
                 return;
             }
-            let raw;
-            try { raw = fs.readFileSync(sopsPath, 'utf8'); }
-            catch (err) { vscode.window.showErrorMessage(`Cannot read file: ${err.message}`); return; }
             const rules = parseCoverageRules(raw);
             const items = [];
             for (const line of raw.split(/\r?\n/)) {
