@@ -1,15 +1,22 @@
 const vscode = require('vscode');
-const path = require('path');
 const { SCHEME } = require('../constants');
+const { detectStoreType, detectByExtension } = require('./storeDetection');
 
+// Backward-compatible API: returns just the type string.
+// Internally consults content sniffing (storeDetection.detectStoreType)
+// with a filename-based fallback when the file is missing or carries no
+// SOPS markers. Callers that need the source/confidence metadata should
+// call getInputTypeDetailed.
 function getInputType(sopsFilePath) {
-    const base = sopsFilePath.replace(/\.sops$/, '');
-    const basename = path.basename(base).toLowerCase();
-    // path.extname returns '' for dotfiles like `.env` / `.envrc`, so match by basename first.
-    if (basename === '.env' || basename.endsWith('.env')) return 'dotenv';
-    if (basename === '.envrc' || basename.endsWith('.envrc')) return 'dotenv';
-    const ext = path.extname(base).toLowerCase();
-    return { '.yaml': 'yaml', '.yml': 'yaml', '.json': 'json', '.ini': 'ini' }[ext] ?? 'yaml';
+    return detectStoreType(sopsFilePath).type;
+}
+
+function getInputTypeDetailed(sopsFilePath) {
+    return detectStoreType(sopsFilePath);
+}
+
+function getInputTypeByExtension(sopsFilePath) {
+    return detectByExtension(sopsFilePath);
 }
 
 // URI convention: sops-decrypted:///abs/path/to/file.env
@@ -29,4 +36,10 @@ function activeSopsPath() {
     return null;
 }
 
-module.exports = { getInputType, toVirtualUri, activeSopsPath };
+module.exports = {
+    getInputType,
+    getInputTypeDetailed,
+    getInputTypeByExtension,
+    toVirtualUri,
+    activeSopsPath,
+};

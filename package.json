@@ -4,8 +4,13 @@
   "description": "Open .sops files decrypted in a native VS Code text editor. Saves re-encrypt automatically.",
   "version": "0.2.0",
   "publisher": "local",
-  "engines": { "vscode": "^1.85.0" },
+  "engines": { "vscode": "^1.85.0", "node": ">=18" },
   "main": "./extension.js",
+  "scripts": {
+    "test": "node scripts/test-detection.js && node scripts/smoke-detect.js",
+    "test:unit": "node scripts/test-detection.js",
+    "test:smoke": "node scripts/smoke-detect.js"
+  },
   "extensionKind": ["workspace"],
   "activationEvents": [
     "onStartupFinished",

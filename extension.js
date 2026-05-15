@@ -43,6 +43,9 @@ function activate(context) {
             isCaseSensitive: true,
             isReadonly: false,
         }),
+        // Dispose the provider itself so its internal onDidChangeConfiguration
+        // listener and EventEmitter are released on deactivate.
+        provider,
         vscode.window.registerCustomEditorProvider('sops.decryptedEditor', redirectEditorProvider, {
             webviewOptions: { retainContextWhenHidden: false },
             supportsMultipleEditorsPerDocument: false,
