@@ -3,7 +3,7 @@ const path = require('path');
 const { SCHEME } = require('../constants');
 
 const decorationProvider = {
-    onDidChangeFileDecorations: new vscode.EventEmitter().event,
+    onDidChangeFileDecorations: undefined,
     provideFileDecoration(uri) {
         if (uri.scheme !== SCHEME) return undefined;
         return {
