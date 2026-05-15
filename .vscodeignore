@@ -1,0 +1,15 @@
+.vscode/**
+.claude/**
+.git/**
+**/.git/**
+scripts/**
+docs/**
+test.*.sops
+*.sops
+2026-*.md
+extensions-*.md
+node_modules/**
+assets/icon.svg
+**/*.test.js
+**/*.spec.js
+.gitignore
