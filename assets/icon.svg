@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Background: dark navy -->
+  <rect width="128" height="128" rx="22" fill="#13263F"/>
+  <!-- Subtle highlight in top-left corner -->
+  <rect width="128" height="128" rx="22" fill="white" fill-opacity="0.04"/>
+  <!-- lock-open icon from Tabler Icons (MIT), scaled 4.5x, centered -->
+  <!-- Original 24x24 content bounds: x≈5..17, y≈6..23 -->
+  <g transform="translate(15, 13) scale(4.5)"
+     stroke="#38BDF8" fill="none"
+     stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <!-- lock body -->
+    <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -6"/>
+    <!-- keyhole dot -->
+    <path d="M11 16a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/>
+    <!-- shackle open on right -->
+    <path d="M8 11v-5a4 4 0 0 1 8 0"/>
+  </g>
+</svg>
