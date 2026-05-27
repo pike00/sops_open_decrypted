@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { detectStoreType, detectByExtension } = require('../util/storeDetection');
@@ -28,6 +29,43 @@ const FORMAT_FALLBACK_RE =
     /cannot parse|could not load input|invalid yaml|invalid json|not a valid|cannot unmarshal|unknown input type|invalid input type/i;
 
 const ALL_TYPES = ['binary', 'json', 'yaml', 'dotenv', 'ini'];
+
+// Map sops --input-type to the conventional file extension. sops does not
+// honor `-` as a stdin sentinel in `encrypt` mode (it resolves it as a
+// relative path against cwd), so we stage plaintext in a tmpfs file with
+// the right extension and pass the real path. /dev/shm is RAM-backed on
+// Linux; the file never touches the disk. Non-Linux falls back to
+// os.tmpdir() which may be on disk — shred + unlink in finally still applies.
+const TYPE_EXT = { json: 'json', yaml: 'yaml', dotenv: 'env', ini: 'ini', binary: 'bin' };
+
+function pickTmpDir() {
+    if (process.platform === 'linux') {
+        try {
+            fs.accessSync('/dev/shm', fs.constants.W_OK);
+            return '/dev/shm';
+        } catch {}
+    }
+    return os.tmpdir();
+}
+
+function shredAndUnlink(p) {
+    if (!p) return;
+    try {
+        const st = fs.statSync(p);
+        const fd = fs.openSync(p, 'r+');
+        try {
+            fs.writeSync(fd, Buffer.alloc(st.size, 0), 0, st.size, 0);
+            fs.fsyncSync(fd);
+        } finally {
+            fs.closeSync(fd);
+        }
+    } catch (e) {
+        if (e.code !== 'ENOENT') logger.warn('fs', 'shred failed', { path: p, error: e.message });
+    }
+    try { fs.unlinkSync(p); } catch (e) {
+        if (e.code !== 'ENOENT') logger.warn('fs', 'tmp unlink failed', { path: p, error: e.message });
+    }
+}
 
 class SopsFileSystemProvider {
     constructor() {
@@ -280,27 +318,38 @@ class SopsFileSystemProvider {
             }
         }
 
-        // Encrypt via stdin — avoids writing plaintext to disk entirely.
-        // `sops encrypt --filename-override <real path> - ` reads from stdin
-        // and matches creation_rules against the real .sops path.
+        // Stage plaintext in a tmpfs file (/dev/shm on Linux) and pass that
+        // path to sops. We can't use `-` for stdin — sops resolves it as a
+        // relative path against cwd. --filename-override keeps creation_rules
+        // matching against the real .sops path.
+        const tmpDir = pickTmpDir();
+        const ext = TYPE_EXT[inputType] || 'bin';
+        const tmpPath = path.join(tmpDir, `sops-encrypt-${crypto.randomBytes(8).toString('hex')}.${ext}`);
         const args = [
             ...buildGlobalFlags(configPath),
             'encrypt',
             '--filename-override', sopsPath,
             '--input-type', inputType,
             '--output-type', inputType,
-            '-',
+            tmpPath,
         ];
 
         let stage = null;
-        logger.trace('fs', 'encrypt prep (stdin mode)', { cwd: dir });
+        logger.trace('fs', 'encrypt prep (tmp-file mode)', { cwd: dir, tmpPath });
         logger.logOpStart('encrypt', { sopsPath, inputType, configPath, cwd: dir, binaryPath, env });
         const t0 = Date.now();
         try {
-            logger.trace('fs', 'spawn encrypt', { binaryPath, args, cwd: dir });
             const buf = Buffer.isBuffer(content) ? content : Buffer.from(String(content));
+            const tfd = fs.openSync(tmpPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+            try {
+                fs.writeSync(tfd, buf);
+                fs.fsyncSync(tfd);
+            } finally {
+                fs.closeSync(tfd);
+            }
+            logger.trace('fs', 'spawn encrypt', { binaryPath, args, cwd: dir });
             const { stdout: encrypted } = await this._runSops(binaryPath, args, {
-                cwd: dir, env, timeout: 30000, input: buf,
+                cwd: dir, env, timeout: 30000,
             });
 
             // Atomic write: stage in same dir, fsync, rename. If we get killed
@@ -328,6 +377,10 @@ class SopsFileSystemProvider {
             logger.logOpResult('encrypt', { ok: false, ms: Date.now() - t0, stderr });
             throw new Error(`SOPS encrypt failed: ${normalizeErr(stderr)}`);
         } finally {
+            // Plaintext tmp file: zero the bytes before unlink. On /dev/shm
+            // this is RAM, but the same code path runs on os.tmpdir() where
+            // it could be a disk-backed filesystem.
+            shredAndUnlink(tmpPath);
             // Stage file only exists if rename never happened — best-effort cleanup.
             if (stage) {
                 try { fs.unlinkSync(stage); logger.trace('fs', 'stage unlinked after failure', { stage }); }
