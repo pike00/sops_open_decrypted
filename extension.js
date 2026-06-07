@@ -1,4 +1,5 @@
 const vscode = require('vscode');
+const fs = require('fs');
 const path = require('path');
 const { SCHEME } = require('./src/constants');
 const { SopsFileSystemProvider } = require('./src/providers/sopsFileSystemProvider');
@@ -57,6 +58,51 @@ function activate(context) {
 
     registerCommands(context);
     saveReason.register(context);
+
+    // VS Code persists swapped-in `sops-decrypted://` text-editor tabs (and,
+    // mid-race, `sops.decryptedEditor` custom tabs) and restores them on reload.
+    // For a secrets extension that re-runs `sops decrypt` on restore this is
+    // undesirable — it silently re-materializes plaintext the user didn't ask to
+    // reopen, and a missing backing file additionally renders a broken erroring
+    // tab. Close every restored decrypted tab once at startup, regardless of
+    // whether the backing `.sops` still exists; dirty tabs are left alone so we
+    // never discard unsaved edits.
+    closeDecryptedTabs();
+}
+
+// Identify a tab backed by our decrypted view, returning the `.sops` path it
+// depends on (for logging) or null if the tab is not one of ours. Custom-editor
+// tabs open the `.sops` file directly; text-editor tabs use the virtual scheme
+// whose fsPath drops the `.sops` suffix.
+function decryptedTabSopsPath(input) {
+    if (input instanceof vscode.TabInputText && input.uri.scheme === SCHEME) {
+        return input.uri.fsPath + '.sops';
+    }
+    if (input instanceof vscode.TabInputCustom && input.viewType === 'sops.decryptedEditor') {
+        return input.uri.fsPath;
+    }
+    return null;
+}
+
+function closeDecryptedTabs() {
+    try {
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                const sopsPath = decryptedTabSopsPath(tab.input);
+                if (!sopsPath) continue;
+                if (tab.isDirty) {
+                    logger.info('activate', 'keeping dirty decrypted tab (unsaved edits)', { sopsPath });
+                    continue;
+                }
+                logger.info('activate', 'closing restored decrypted tab', {
+                    sopsPath, exists: fs.existsSync(sopsPath),
+                });
+                vscode.window.tabGroups.close(tab).then(undefined, () => {});
+            }
+        }
+    } catch (err) {
+        logger.warn('activate', 'decrypted-tab sweep failed', { error: err.message });
+    }
 }
 
 function deactivate() {}

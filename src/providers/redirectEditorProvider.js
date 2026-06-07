@@ -1,4 +1,6 @@
 const vscode = require('vscode');
+const fs = require('fs');
+const path = require('path');
 const { toVirtualUri } = require('../util/paths');
 const logger = require('../util/logger');
 
@@ -16,18 +18,45 @@ const redirectEditorProvider = {
                 <p style="font-size:0.9em">If this hangs, run <code>SOPS: Show Log</code> from the command palette.</p>
             </body></html>`;
         const viewColumn = webviewPanel.viewColumn ?? vscode.ViewColumn.Active;
-        const virtualUri = toVirtualUri(document.uri.fsPath);
+        const sopsPath = document.uri.fsPath;
+        const virtualUri = toVirtualUri(sopsPath);
+
+        const findCustomTab = () => vscode.window.tabGroups.all
+            .flatMap(g => g.tabs)
+            .find(t =>
+                t.input instanceof vscode.TabInputCustom &&
+                t.input.viewType === 'sops.decryptedEditor' &&
+                t.input.uri.toString() === document.uri.toString()
+            );
+
+        // If the user dismisses the loading placeholder within the 500ms window,
+        // skip the deferred swap so we don't pop a decrypted editor open — or
+        // fire a redundant error — after they've already closed the tab.
+        let disposed = false;
+        webviewPanel.onDidDispose(() => { disposed = true; });
+
+        // A tab restored on window reload — or opened a moment before the file
+        // is created — can point at a .sops file that no longer exists on disk.
+        // Decryption is impossible and every diagnostic action below (recipients,
+        // config, trace) is irrelevant, so close the placeholder and say so
+        // plainly instead of surfacing the full decrypt-failure modal.
+        if (!fs.existsSync(sopsPath)) {
+            webviewPanel.webview.html =
+                `<html><body style="font-family:sans-serif;padding:2em;color:#888;text-align:center">` +
+                `<h2 style="font-weight:300">Encrypted file not found</h2></body></html>`;
+            logger.warn('redirect', 'backing .sops file missing; closing stale tab', { sopsPath });
+            setTimeout(async () => {
+                try { const t = findCustomTab(); if (t) await vscode.window.tabGroups.close(t); } catch {}
+                vscode.window.showWarningMessage(
+                    `SOPS: ${path.basename(sopsPath)} does not exist — the encrypted file may have been moved or deleted.`
+                );
+            }, 0);
+            return;
+        }
 
         // Show the placeholder for ~500ms before swapping to the real editor.
         setTimeout(async () => {
-            const findCustomTab = () => vscode.window.tabGroups.all
-                .flatMap(g => g.tabs)
-                .find(t =>
-                    t.input instanceof vscode.TabInputCustom &&
-                    t.input.viewType === 'sops.decryptedEditor' &&
-                    t.input.uri.toString() === document.uri.toString()
-                );
-
+            if (disposed) return;
             try {
                 await vscode.window.showTextDocument(virtualUri, { preview: false, viewColumn });
                 const customTab = findCustomTab();
@@ -36,7 +65,7 @@ const redirectEditorProvider = {
                 // Close the stale webview placeholder even on failure.
                 try { const t = findCustomTab(); if (t) await vscode.window.tabGroups.close(t); } catch {}
                 logger.error('redirect', 'showTextDocument failed', {
-                    sopsPath: document.uri.fsPath,
+                    sopsPath,
                     message: err.message,
                 });
                 const choice = await vscode.window.showErrorMessage(
