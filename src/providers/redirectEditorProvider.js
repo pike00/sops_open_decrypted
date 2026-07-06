@@ -54,7 +54,10 @@ const redirectEditorProvider = {
             return;
         }
 
-        // Show the placeholder for ~500ms before swapping to the real editor.
+        // Swap to the real editor on the next tick. The work is deferred (not
+        // awaited) so resolveCustomEditor returns promptly, but with no artificial
+        // delay — the old fixed ~500ms placeholder added that latency to every
+        // open. The placeholder webview above covers the brief decrypt window.
         setTimeout(async () => {
             if (disposed) return;
             try {
@@ -80,7 +83,7 @@ const redirectEditorProvider = {
                 else if (choice === 'Show Recipients') vscode.commands.executeCommand('sops.showRecipients');
                 else if (choice === 'Show Effective Configuration') vscode.commands.executeCommand('sops.showEffectiveConfig');
             }
-        }, 500);
+        }, 0);
     },
 };
 
