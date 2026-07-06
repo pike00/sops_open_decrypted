@@ -1,4 +1,5 @@
 const openDecrypted = require('./openDecrypted');
+const newEncryptedFile = require('./newEncryptedFile');
 const editorActions = require('./editorActions');
 const openApplicableConfig = require('./openApplicableConfig');
 const revealInSCM = require('./revealInSCM');
@@ -10,6 +11,7 @@ const showLog = require('./showLog');
 
 function registerAll(context) {
     openDecrypted.register(context);
+    newEncryptedFile.register(context);
     editorActions.register(context);
     openApplicableConfig.register(context);
     revealInSCM.register(context);
