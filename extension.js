@@ -68,6 +68,40 @@ function activate(context) {
     // whether the backing `.sops` still exists; dirty tabs are left alone so we
     // never discard unsaved edits.
     closeDecryptedTabs();
+
+    // Closing tabs covers restored views, but an *unsaved* decrypted buffer is
+    // a different leak: VS Code hot-exit can write its cleartext contents to
+    // backup storage on disk. There's no API to opt a scheme out of that, so
+    // surface the trade-off once and offer the one real mitigation.
+    maybeWarnHotExit(context);
+}
+
+async function maybeWarnHotExit(context) {
+    try {
+        if (!vscode.workspace.getConfiguration('sops').get('warnOnHotExit', true)) return;
+        if (vscode.workspace.getConfiguration('files').get('hotExit', 'onExit') === 'off') return;
+        const STATE_KEY = 'sops.hotExitWarningAcknowledged';
+        if (context.globalState.get(STATE_KEY)) return;
+
+        const SET_OFF = 'Set files.hotExit: off';
+        const DISMISS = "Don't show again";
+        const choice = await vscode.window.showWarningMessage(
+            'SOPS: VS Code hot-exit can persist unsaved editor contents — including decrypted secrets — to backup storage as cleartext. ' +
+            'Set files.hotExit to "off" (you will be prompted to save on exit instead), or avoid leaving decrypted files unsaved.',
+            SET_OFF,
+            DISMISS,
+        );
+        if (choice === SET_OFF) {
+            await vscode.workspace.getConfiguration('files').update('hotExit', 'off', vscode.ConfigurationTarget.Global);
+            await context.globalState.update(STATE_KEY, true);
+            vscode.window.showInformationMessage('SOPS: files.hotExit set to "off".');
+        } else if (choice === DISMISS) {
+            await context.globalState.update(STATE_KEY, true);
+        }
+        // Escape/dismiss without a choice: leave unacknowledged so it reminds once more.
+    } catch (err) {
+        logger.warn('activate', 'hot-exit warning failed', { error: err.message });
+    }
 }
 
 // Identify a tab backed by our decrypted view, returning the `.sops` path it
