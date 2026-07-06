@@ -88,6 +88,7 @@ All commands are in the **SOPS** category and available via the Command Palette 
 | Command | Description |
 |---|---|
 | `SOPS: Open SOPS Decrypted` | Open a `.sops` file in the decrypted editor view. Also available via Explorer right-click. |
+| `SOPS: New Encrypted File` | Create a new encrypted file: pick a store type and name, then edit it decrypted. Recipients come from the governing `.sops.yaml`. Also available via Explorer folder right-click. |
 | `SOPS: Save & Re-encrypt` | Encrypt the current in-memory content and write it back to the `.sops` file. Equivalent to Ctrl+S. |
 | `SOPS: Discard` | Revert all in-memory edits, restoring the last decrypted state from disk. |
 | `SOPS: Reveal .sops Source` | Reveal the underlying encrypted `.sops` file in the Explorer. |
@@ -124,9 +125,13 @@ The extension delegates all cryptographic operations to the `sops` binary. Suppo
 
 ## Security Notes
 
-**Autosave is intentionally disabled.** AfterDelay and FocusOut autosave will not trigger re-encryption. Only an explicit save (Ctrl+S or the Save & Re-encrypt command) writes to disk. This prevents partial or unintended re-encryption during editing.
+**Autosave is intentionally disabled.** AfterDelay and FocusOut autosave will not trigger re-encryption — the write is rejected and the editor stays dirty, so no edits are lost. Only an explicit save (Ctrl+S or the Save & Re-encrypt command) writes to disk. This prevents partial or unintended re-encryption during editing (which would also churn git and spawn sops on every pause). If you run with `files.autoSave` enabled, VS Code will surface a save-rejected notice on each autosave tick; set `files.autoSave` to `off` for these files to avoid it.
 
 **Plaintext stays in memory.** The decrypted content lives in a `sops-decrypted://` virtual filesystem backed by a JavaScript `Buffer`. On Linux, any temp file required for intermediate sops operations uses `/dev/shm` (RAM-backed, not persisted to disk). On other platforms, temp files use the OS temp directory and are deleted immediately after use.
+
+**Decrypted views are not restored across reloads.** On window reload, VS Code would otherwise re-open any previously-open decrypted tabs (silently re-running `sops decrypt`). To avoid that, the extension closes all restored decrypted tabs at startup. Tabs with *unsaved* edits are left alone so your work is never discarded.
+
+**Hot-exit can leak cleartext.** VS Code's `files.hotExit` persists *unsaved* editor contents to backup storage between sessions, and there is no API to exempt a virtual filesystem scheme from this. If you leave a decrypted file unsaved when the window closes or crashes, its plaintext may land in VS Code's backup directory. For a secrets workflow, set `files.hotExit` to `off` (VS Code then prompts you to save on exit instead) or don't leave decrypted files unsaved. The extension warns once when hot-exit is enabled; silence it with `sops.warnOnHotExit: false`.
 
 **Atomic writes.** Re-encryption writes to a staging file alongside the `.sops` file, then renames it into place. The original encrypted file is never partially overwritten.
 
