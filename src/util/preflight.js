@@ -61,7 +61,7 @@ function checkFileReadable(filePath) {
         if (s.size === 0) return { ok: false, reason: `${filePath} is empty — nothing to decrypt.` };
         return { ok: true, size: s.size };
     } catch (err) {
-        if (err.code === 'ENOENT') return { ok: false, reason: `Encrypted file not found: ${filePath}` };
+        if (err.code === 'ENOENT') return { ok: false, notFound: true, reason: `Encrypted file not found: ${filePath}` };
         if (err.code === 'EACCES') return { ok: false, reason: `Permission denied reading ${filePath}.` };
         return { ok: false, reason: `Cannot read ${filePath}: ${err.message}` };
     }

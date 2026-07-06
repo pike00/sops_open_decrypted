@@ -75,6 +75,12 @@ class SopsFileSystemProvider {
         // shell out before every read/write — a single check per session
         // suffices unless the user changes the setting.
         this._binaryChecked = new Map();
+        // Coalesce concurrent readFile calls for the same URI. VS Code can ask
+        // for the same decrypted view more than once at a time (editor + diff +
+        // peek + decoration), and each call would otherwise spawn its own sops
+        // process — N simultaneous KMS round-trips for one file. Callers share
+        // the in-flight promise; the entry is dropped as soon as it settles.
+        this._inflight = new Map();
         this._disposables = [];
 
         // Drop the binary-probe cache whenever the user changes
@@ -162,14 +168,28 @@ class SopsFileSystemProvider {
         }
     }
 
-    async readFile(uri) {
+    readFile(uri) {
+        const key = uri.toString();
+        const existing = this._inflight.get(key);
+        if (existing) {
+            logger.trace('fs', 'readFile coalesced with in-flight decrypt', { uri: key });
+            return existing;
+        }
+        const p = this._doReadFile(uri).finally(() => this._inflight.delete(key));
+        this._inflight.set(key, p);
+        return p;
+    }
+
+    async _doReadFile(uri) {
         const sopsPath = uri.fsPath + '.sops';
         logger.trace('fs', 'readFile enter', { uri: uri.toString(), fsPath: uri.fsPath, sopsPath });
 
         const rf = checkFileReadable(sopsPath);
         if (!rf.ok) {
             logger.error('preflight', 'file not readable', { sopsPath, reason: rf.reason });
-            throw vscode.FileSystemError.FileNotFound(uri);
+            throw rf.notFound
+                ? vscode.FileSystemError.FileNotFound(rf.reason)
+                : vscode.FileSystemError.Unavailable(rf.reason);
         }
 
         const detection = detectStoreType(sopsPath);
@@ -191,14 +211,14 @@ class SopsFileSystemProvider {
         });
         if (configPathError) {
             logger.error('fs', 'decrypt aborted (configPathError)', { configPathError });
-            throw new Error(configPathError);
+            throw vscode.FileSystemError.Unavailable(configPathError);
         }
         if (envFileError) {
             logger.warn('fs', 'envFile read error (continuing without)', { envFile, envFileError });
         }
 
         const binCheck = await this._ensureBinary(binaryPath, env);
-        if (!binCheck.ok) throw new Error(binCheck.reason);
+        if (!binCheck.ok) throw vscode.FileSystemError.Unavailable(binCheck.reason);
 
         const cwd = path.dirname(sopsPath);
         logger.logOpStart('decrypt', {
@@ -238,7 +258,7 @@ class SopsFileSystemProvider {
 
         // No more avenues — surface the original (most informative) error.
         logger.logOpResult('decrypt', { ok: false, ms: primary.ms, stderr: primary.stderr });
-        throw new Error(`SOPS decrypt failed: ${normalizeErr(primary.stderr)}`);
+        throw vscode.FileSystemError.Unavailable(`SOPS decrypt failed: ${normalizeErr(primary.stderr)}`);
     }
 
     async writeFile(uri, content) {
@@ -289,14 +309,14 @@ class SopsFileSystemProvider {
         });
         if (configPathError) {
             logger.error('fs', 'encrypt aborted (configPathError)', { configPathError });
-            throw new Error(configPathError);
+            throw vscode.FileSystemError.Unavailable(configPathError);
         }
         if (envFileError) {
             logger.warn('fs', 'envFile read error (continuing without)', { envFile, envFileError });
         }
 
         const binCheck = await this._ensureBinary(binaryPath, env);
-        if (!binCheck.ok) throw new Error(binCheck.reason);
+        if (!binCheck.ok) throw vscode.FileSystemError.Unavailable(binCheck.reason);
 
         // Pre-validate dotenv before spawning sops so the error clearly names
         // the bad line. SOPS rejects any non-empty, non-comment line without
@@ -314,7 +334,7 @@ class SopsFileSystemProvider {
                     badLines: bad.map(b => b.n),
                     previewLines: bad.slice(0, 3).map(b => ({ n: b.n, text: b.text })),
                 });
-                throw new Error(msg);
+                throw vscode.FileSystemError.Unavailable(msg);
             }
         }
 
@@ -375,7 +395,7 @@ class SopsFileSystemProvider {
         } catch (err) {
             const stderr = err.stderr?.toString() || err.message;
             logger.logOpResult('encrypt', { ok: false, ms: Date.now() - t0, stderr });
-            throw new Error(`SOPS encrypt failed: ${normalizeErr(stderr)}`);
+            throw vscode.FileSystemError.Unavailable(`SOPS encrypt failed: ${normalizeErr(stderr)}`);
         } finally {
             // Plaintext tmp file: zero the bytes before unlink. On /dev/shm
             // this is RAM, but the same code path runs on os.tmpdir() where
