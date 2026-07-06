@@ -10,9 +10,10 @@
   },
   "main": "./extension.js",
   "scripts": {
-    "test": "node scripts/test-detection.js && node scripts/smoke-detect.js",
-    "test:unit": "node scripts/test-detection.js",
+    "test": "node scripts/test-detection.js && node scripts/test-sops-errors.js && node scripts/smoke-detect.js",
+    "test:unit": "node scripts/test-detection.js && node scripts/test-sops-errors.js",
     "test:smoke": "node scripts/smoke-detect.js",
+    "test:integration": "node ./test/runTest.js",
     "vscode:prepublish": "npm run test:unit",
     "package": "vsce package",
     "publish": "vsce publish"
@@ -53,7 +54,10 @@
   },
   "preview": false,
   "devDependencies": {
-    "@vscode/vsce": "^3.2.0"
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.0",
+    "glob": "^10.4.5",
+    "mocha": "^10.7.3"
   },
   "contributes": {
     "configuration": {
@@ -91,6 +95,12 @@
           "default": "",
           "scope": "window",
           "markdownDescription": "Append-only trace log file. Empty → `$XDG_STATE_HOME/sops-open-decrypted/trace.log` (falls back to `~/.local/state/…`). Supports `~`, `${userHome}`, `${env:VAR}`. Contents include paths, args, durations, stderr — never file bodies or env values."
+        },
+        "sops.warnOnHotExit": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "Warn once when VS Code's `files.hotExit` is not `off`. Hot exit can persist unsaved editor contents — including decrypted secrets — to backup storage as cleartext. Disable this if you have accepted that trade-off."
         }
       }
     },
@@ -112,6 +122,12 @@
         "title": "Open SOPS Decrypted",
         "category": "SOPS",
         "icon": "$(unlock)"
+      },
+      {
+        "command": "sops.newEncryptedFile",
+        "title": "New Encrypted File",
+        "category": "SOPS",
+        "icon": "$(new-file)"
       },
       {
         "command": "sops.saveDecrypted",
@@ -186,6 +202,11 @@
           "command": "sops.openDecrypted",
           "when": "resourceExtname == .sops",
           "group": "navigation@1"
+        },
+        {
+          "command": "sops.newEncryptedFile",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@2"
         }
       ],
       "editor/title": [
@@ -215,6 +236,9 @@
         {
           "command": "sops.openDecrypted",
           "when": "resourceExtname == .sops"
+        },
+        {
+          "command": "sops.newEncryptedFile"
         },
         {
           "command": "sops.saveDecrypted",
