@@ -3,6 +3,7 @@
 .git/**
 **/.git/**
 scripts/**
+test/**
 docs/**
 test.*.sops
 *.sops
